@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+    <title>Image Evolution: The Geometric Flow Challenge</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
+        
+        :root {
+            --bg-color: #1a1a2e;
+            --primary-color: #16213e;
+            --secondary-color: #0f3460;
+            --accent-color: #e94560;
+            --font-color: #dcdcdc;
+            --success-color: #4caf50;
+            --fail-color: #f44336;
+            --disabled-color: #555;
+            --border-glow: rgba(233, 69, 96, 0.5);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Roboto Mono', monospace;
+            background-color: var(--bg-color);
+            color: var(--font-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        #game-container {
+            width: 100%;
+            max-width: 1200px;
+            background-color: var(--primary-color);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+            border: 2px solid var(--secondary-color);
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 25px;
+            border-bottom: 2px solid var(--secondary-color);
+            padding-bottom: 15px;
+        }
+
+        header h1 {
+            color: var(--accent-color);
+            font-size: 2em;
+            text-shadow: 0 0 10px var(--accent-color);
+        }
+        
+        header p {
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        main {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 25px;
+        }
+
+        #image-display {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 15px;
+            background-color: var(--secondary-color);
+            border-radius: 10px;
+        }
+        
+        .canvas-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .canvas-container h3 {
+            margin-bottom: 10px;
+            font-size: 1.1em;
+            text-transform: uppercase;
+        }
+
+        canvas {
+            background-color: #000;
+            border-radius: 5px;
+            border: 2px solid var(--bg-color);
+            width: 100%;
+            height: auto;
+            aspect-ratio: 1 / 1;
+        }
+
+        #controls {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .stats-panel, .tools-panel {
+            background-color: var(--secondary-color);
+            padding: 20px;
+            border-radius: 10px;
+        }
+        
+        .stats-panel h2, .tools-panel h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--primary-color);
+            padding-bottom: 10px;
+        }
+        
+        .stat {
+            margin-bottom: 15px;
+        }
+        
+        .stat-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label .target {
+            color: var(--accent-color);
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 12px;
+            background-color: var(--primary-color);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background-color: var(--accent-color);
+            width: 0%;
+            transition: width 0.3s ease-in-out;
+            border-radius: 6px;
+        }
+        
+        #tools-container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+        }
+
+        .tool-btn {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--accent-color);
+            color: var(--font-color);
+            border: none;
+            border-radius: 5px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .tool-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px var(--border-glow);
+        }
+
+        .tool-btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .tool-btn:disabled {
+            background-color: var(--disabled-color);
+            cursor: not-allowed;
+        }
+        
+        .tool-btn .cost {
+            position: absolute;
+            top: 5px;
+            right: 10px;
+            font-size: 0.7em;
+            opacity: 0.8;
+        }
+        
+        #modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        
+        #modal.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-content {
+            background-color: var(--primary-color);
+            padding: 30px 40px;
+            border-radius: 10px;
+            text-align: center;
+            border: 2px solid var(--accent-color);
+            box-shadow: 0 0 20px var(--border-glow);
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+        
+        #modal.visible .modal-content {
+             transform: scale(1);
+        }
+        
+        .modal-content h2 {
+            font-size: 2em;
+            margin-bottom: 20px;
+        }
+
+        .modal-content button {
+            margin-top: 20px;
+            padding: 10px 30px;
+            font-size: 1em;
+        }
+        
+        @media (max-width: 900px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+            #image-display {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <header>
+            <h1 id="level-title">Level 1: The Basics</h1>
+            <p id="level-description">Remove the noise without blurring the core shape.</p>
+        </header>
+        <main>
+            <div id="image-display">
+                <div class="canvas-container">
+                    <h3>Processed Image</h3>
+                    <canvas id="processedCanvas" width="256" height="256"></canvas>
+                </div>
+                <div class="canvas-container">
+                    <h3>Ground Truth</h3>
+                    <canvas id="groundTruthCanvas" width="256" height="256"></canvas>
+                </div>
+            </div>
+            <div id="controls">
+                <div class="stats-panel">
+                    <h2>Analysis</h2>
+                    <div class="stat">
+                        <div class="stat-label">
+                            <span>Energy</span>
+                            <span id="energy-value">100</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div id="energy-bar" class="progress-fill"></div>
+                        </div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">
+                            <span>PSNR</span>
+                            <span class="target">Target: <span id="psnr-target">0</span></span>
+                        </div>
+                        <div class="progress-bar">
+                            <div id="psnr-bar" class="progress-fill"></div>
+                        </div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">
+                            <span>SSIM</span>
+                            <span class="target">Target: <span id="ssim-target">0</span></span>
+                        </div>
+                        <div class="progress-bar">
+                            <div id="ssim-bar" class="progress-fill"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="tools-panel">
+                    <h2>Tools</h2>
+                    <div id="tools-container">
+                        <button class="tool-btn" id="tool-mcf" data-cost="5">Mean Curvature <span class="cost">-5 E</span></button>
+                        <button class="tool-btn" id="tool-ad" data-cost="15">Anisotropic Diffusion <span class="cost">-15 E</span></button>
+                        <button class="tool-btn" id="tool-csf" data-cost="10">Curve Shortening <span class="cost">-10 E</span></button>
+                        <button class="tool-btn" id="tool-rf" data-cost="25">Ricci Flow <span class="cost">-25 E</span></button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="modal">
+        <div class="modal-content">
+            <h2 id="modal-title"></h2>
+            <p id="modal-text"></p>
+            <button id="modal-button" class="tool-btn"></button>
+        </div>
+    </div>
+
+    <script>
+        const config = {
+            CANVAS_SIZE: 128,
+        };
+
+        const levels = [
+            {
+                name: "Level 1: The Basics",
+                description: "A simple shape. Use the basic smoother to clean it up.",
+                startEnergy: 100,
+                targetPSNR: 80,
+                targetSSIM: 70,
+                noiseLevel: 0.4,
+                drawImage: (ctx) => {
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(config.CANVAS_SIZE * 0.2, config.CANVAS_SIZE * 0.2, config.CANVAS_SIZE * 0.6, config.CANVAS_SIZE * 0.6);
+                }
+            },
+            {
+                name: "Level 2: Edge Preservation",
+                description: "Things are getting sharper. Blurring will be heavily penalized.",
+                startEnergy: 80,
+                targetPSNR: 85,
+                targetSSIM: 90,
+                noiseLevel: 0.3,
+                drawImage: (ctx) => {
+                    ctx.fillStyle = 'white';
+                    for (let i = 0; i < 5; i++) {
+                        ctx.fillRect(config.CANVAS_SIZE * (0.1 + i * 0.18), config.CANVAS_SIZE * 0.1, config.CANVAS_SIZE * 0.08, config.CANVAS_SIZE * 0.8);
+                    }
+                }
+            },
+            {
+                name: "Level 3: The Precision Tool",
+                description: "High noise, but sharp edges. You'll need the Anisotropic tool.",
+                startEnergy: 120,
+                targetPSNR: 90,
+                targetSSIM: 92,
+                noiseLevel: 0.6,
+                drawImage: (ctx) => {
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 8;
+                    ctx.beginPath();
+                    ctx.moveTo(config.CANVAS_SIZE * 0.1, config.CANVAS_SIZE * 0.1);
+                    ctx.lineTo(config.CANVAS_SIZE * 0.9, config.CANVAS_SIZE * 0.9);
+                    ctx.moveTo(config.CANVAS_SIZE * 0.9, config.CANVAS_SIZE * 0.1);
+                    ctx.lineTo(config.CANVAS_SIZE * 0.1, config.CANVAS_SIZE * 0.9);
+                    ctx.stroke();
+                }
+            },
+            {
+                name: "Level 4: The Finishing Touch",
+                description: "First, clean the image. Then, use the Curve Shortening flow to enhance the edges.",
+                startEnergy: 90,
+                targetPSNR: 88,
+                targetSSIM: 98,
+                noiseLevel: 0.5,
+                drawImage: (ctx) => {
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 5;
+                    ctx.beginPath();
+                    ctx.arc(config.CANVAS_SIZE / 2, config.CANVAS_SIZE / 2, config.CANVAS_SIZE * 0.35, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            },
+            {
+                name: "Level 5: The Ricci Trap",
+                description: "This complex structure is fragile. The Ricci Flow looks tempting... but is it wise?",
+                startEnergy: 100,
+                targetPSNR: 95,
+                targetSSIM: 85,
+                noiseLevel: 0.7,
+                drawImage: (ctx) => {
+                    ctx.fillStyle = 'white';
+                    for(let i = 0; i < 8; i++) {
+                        for(let j = 0; j < 8; j++) {
+                            if ((i + j) % 2 === 0) {
+                                ctx.fillRect(i * config.CANVAS_SIZE/8, j * config.CANVAS_SIZE/8, config.CANVAS_SIZE/8, config.CANVAS_SIZE/8);
+                            }
+                        }
+                    }
+                }
+            }
+        ];
+
+        const dom = {
+            processedCanvas: document.getElementById('processedCanvas'),
+            groundTruthCanvas: document.getElementById('groundTruthCanvas'),
+            levelTitle: document.getElementById('level-title'),
+            levelDescription: document.getElementById('level-description'),
+            energyValue: document.getElementById('energy-value'),
+            energyBar: document.getElementById('energy-bar'),
+            psnrBar: document.getElementById('psnr-bar'),
+            ssimBar: document.getElementById('ssim-bar'),
+            psnrTarget: document.getElementById('psnr-target'),
+            ssimTarget: document.getElementById('ssim-target'),
+            toolButtons: document.querySelectorAll('.tool-btn'),
+            modal: document.getElementById('modal'),
+            modalTitle: document.getElementById('modal-title'),
+            modalText: document.getElementById('modal-text'),
+            modalButton: document.getElementById('modal-button')
+        };
+        
+        const gameState = {
+            levelIndex: 0,
+            energy: 0,
+            noise: 0,
+            edgeIntegrity: 0,
+            artifacts: 0,
+            psnr: 0,
+            ssim: 0,
+            isGameOver: false,
+        };
+
+        function getImageData(canvas) {
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            return ctx.getImageData(0, 0, canvas.width, canvas.height);
+        }
+
+        function getGrayscaleData(imageData) {
+            const data = [];
+            for (let i = 0; i < imageData.data.length; i += 4) {
+                data.push(imageData.data[i]);
+            }
+            return data;
+        }
+
+        function calculateEdgeMap(data) {
+            const edgeMap = new Array(data.length).fill(0);
+            const w = config.CANVAS_SIZE;
+            for (let i = 0; i < data.length; i++) {
+                const x = i % w;
+                const y = Math.floor(i / w);
+                if (x > 0 && x < w - 1 && y > 0 && y < w - 1) {
+                    const gx = (data[i + 1] - data[i - 1]);
+                    const gy = (data[i + w] - data[i - w]);
+                    const magnitude = Math.sqrt(gx*gx + gy*gy);
+                    if(magnitude > 50) edgeMap[i] = 1;
+                }
+            }
+            return edgeMap;
+        }
+
+        function calculateScores() {
+            gameState.psnr = Math.max(0, 100 - gameState.noise * 100 - gameState.artifacts * 50);
+            gameState.ssim = Math.max(0, 100 * gameState.edgeIntegrity - gameState.noise * 30 - gameState.artifacts * 100);
+            gameState.psnr = Math.round(gameState.psnr);
+            gameState.ssim = Math.round(gameState.ssim);
+        }
+
+        function updateUI() {
+            const level = levels[gameState.levelIndex];
+            
+            gameState.energy = Math.max(0, gameState.energy);
+            const energyPercent = (gameState.energy / level.startEnergy) * 100;
+            dom.energyValue.textContent = `${gameState.energy} / ${level.startEnergy}`;
+            dom.energyBar.style.width = `${energyPercent}%`;
+
+            const psnrPercent = (gameState.psnr / level.targetPSNR) * 100;
+            dom.psnrBar.style.width = `${Math.min(100, psnrPercent)}%`;
+            dom.psnrBar.style.backgroundColor = gameState.psnr >= level.targetPSNR ? 'var(--success-color)' : 'var(--accent-color)';
+
+            const ssimPercent = (gameState.ssim / level.targetSSIM) * 100;
+            dom.ssimBar.style.width = `${Math.min(100, ssimPercent)}%`;
+            dom.ssimBar.style.backgroundColor = gameState.ssim >= level.targetSSIM ? 'var(--success-color)' : 'var(--accent-color)';
+            
+            dom.toolButtons.forEach(btn => {
+                btn.disabled = parseInt(btn.dataset.cost) > gameState.energy || gameState.isGameOver;
+            });
+        }
+        
+        function applyCanvasFilter(filter) {
+            const ctx = dom.processedCanvas.getContext('2d');
+            ctx.filter = filter;
+            ctx.drawImage(dom.processedCanvas, 0, 0);
+            ctx.filter = 'none';
+        }
+
+        function applyRicciArtifacts() {
+            const ctx = dom.processedCanvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, config.CANVAS_SIZE, config.CANVAS_SIZE);
+            const data = imageData.data;
+            const blockSize = 8;
+            for (let y = 0; y < config.CANVAS_SIZE; y += blockSize) {
+                for (let x = 0; x < config.CANVAS_SIZE; x += blockSize) {
+                    const offsetX = Math.round((Math.random() - 0.5) * 4);
+                    const offsetY = Math.round((Math.random() - 0.5) * 4);
+                    ctx.putImageData(imageData, offsetX, offsetY, x, y, blockSize, blockSize);
+                }
+            }
+        }
+        
+        function checkGameState() {
+            if (gameState.isGameOver) return;
+            const level = levels[gameState.levelIndex];
+            
+            const isWin = gameState.psnr >= level.targetPSNR && gameState.ssim >= level.targetSSIM;
+            
+            if (isWin) {
+                gameState.isGameOver = true;
+                setTimeout(() => showModal(true), 500);
+            } else if (gameState.energy <= 0) {
+                gameState.isGameOver = true;
+                setTimeout(() => showModal(false), 500);
+            }
+        }
+        
+        function showModal(isWin) {
+            const hasNextLevel = gameState.levelIndex < levels.length - 1;
+            if (isWin) {
+                dom.modalTitle.textContent = hasNextLevel ? `Level ${gameState.levelIndex + 1} Cleared!` : "All Levels Complete!";
+                dom.modalTitle.style.color = 'var(--success-color)';
+                dom.modalText.textContent = hasNextLevel ? "Image data restored successfully. Proceed to the next challenge." : "You have mastered the Geometric Flows!";
+                dom.modalButton.textContent = hasNextLevel ? "Next Level" : "Play Again";
+                dom.modalButton.onclick = hasNextLevel ? () => {
+                    gameState.levelIndex++;
+                    loadLevel(gameState.levelIndex);
+                } : () => {
+                    gameState.levelIndex = 0;
+                    loadLevel(0);
+                };
+            } else {
+                dom.modalTitle.textContent = "Processing Failed";
+                dom.modalTitle.style.color = 'var(--fail-color)';
+                dom.modalText.textContent = "Energy depleted. The image structure could not be recovered.";
+                dom.modalButton.textContent = "Retry Level";
+                dom.modalButton.onclick = () => loadLevel(gameState.levelIndex);
+            }
+            dom.modal.classList.add('visible');
+        }
+
+        const tools = {
+            mcf: () => {
+                gameState.noise *= 0.7;
+                gameState.edgeIntegrity *= 0.9;
+                applyCanvasFilter('blur(0.5px)');
+            },
+            ad: () => {
+                gameState.noise *= 0.5;
+                gameState.edgeIntegrity *= 0.98;
+                applyCanvasFilter('blur(0.2px)');
+            },
+            csf: () => {
+                if (gameState.noise < 0.2) {
+                    gameState.edgeIntegrity = Math.min(1, gameState.edgeIntegrity * 1.5);
+                    applyCanvasFilter('contrast(1.2)');
+                } else {
+                    gameState.edgeIntegrity *= 0.8; 
+                }
+            },
+            rf: () => {
+                gameState.noise *= 0.1;
+                gameState.artifacts += 0.5;
+                applyRicciArtifacts();
+            }
+        };
+
+        function setupEventListeners() {
+            dom.toolButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (gameState.isGameOver) return;
+                    const toolId = btn.id.split('-')[1];
+                    const cost = parseInt(btn.dataset.cost);
+                    if (gameState.energy >= cost) {
+                        gameState.energy -= cost;
+                        tools[toolId]();
+                        calculateScores();
+                        updateUI();
+                        checkGameState();
+                    }
+                });
+            });
+        }
+
+        function loadLevel(index) {
+            gameState.levelIndex = index;
+            const level = levels[index];
+
+            dom.modal.classList.remove('visible');
+            gameState.isGameOver = false;
+
+            dom.processedCanvas.width = config.CANVAS_SIZE;
+            dom.processedCanvas.height = config.CANVAS_SIZE;
+            dom.groundTruthCanvas.width = config.CANVAS_SIZE;
+            dom.groundTruthCanvas.height = config.CANVAS_SIZE;
+
+            const processedCtx = dom.processedCanvas.getContext('2d');
+            const groundTruthCtx = dom.groundTruthCanvas.getContext('2d');
+
+            [processedCtx, groundTruthCtx].forEach(ctx => {
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0, 0, config.CANVAS_SIZE, config.CANVAS_SIZE);
+                level.drawImage(ctx);
+            });
+
+            const groundTruthData = getGrayscaleData(getImageData(dom.groundTruthCanvas));
+            const groundTruthEdgeMap = calculateEdgeMap(groundTruthData);
+            const edgePixelCount = groundTruthEdgeMap.reduce((a,b) => a+b, 0);
+
+            const noisyImageData = getImageData(dom.processedCanvas);
+            const data = noisyImageData.data;
+            for(let i=0; i<data.length; i+=4) {
+                const noise = (Math.random() - 0.5) * 255 * level.noiseLevel;
+                data[i] = Math.max(0, Math.min(255, data[i] + noise));
+                data[i+1] = data[i];
+                data[i+2] = data[i];
+            }
+            processedCtx.putImageData(noisyImageData, 0, 0);
+
+            const noisyGrayscale = getGrayscaleData(noisyImageData);
+            const noisyEdgeMap = calculateEdgeMap(noisyGrayscale);
+            let correctEdges = 0;
+            for(let i=0; i < groundTruthEdgeMap.length; i++){
+                if(groundTruthEdgeMap[i] === 1 && noisyEdgeMap[i] === 1){
+                    correctEdges++;
+                }
+            }
+
+            gameState.energy = level.startEnergy;
+            gameState.noise = level.noiseLevel;
+            gameState.edgeIntegrity = edgePixelCount > 0 ? correctEdges / edgePixelCount : 1;
+            gameState.artifacts = 0;
+            
+            dom.levelTitle.textContent = level.name;
+            dom.levelDescription.textContent = level.description;
+            dom.psnrTarget.textContent = level.targetPSNR;
+            dom.ssimTarget.textContent = level.targetSSIM;
+
+            calculateScores();
+            updateUI();
+        }
+
+        function init() {
+            setupEventListeners();
+            loadLevel(0);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
